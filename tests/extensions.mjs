@@ -1,0 +1,88 @@
+import {Client} from '@modelcontextprotocol/sdk/client/index.js';
+import {StdioClientTransport} from '@modelcontextprotocol/sdk/client/stdio.js';
+import {WebSocketServer} from 'ws';
+import sharp from 'sharp';
+import http from 'node:http';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import assert from 'node:assert/strict';
+import {Events} from '../events.mjs';
+import {preview} from '../media.mjs';
+
+const dir=await fs.mkdtemp(path.join(os.tmpdir(),'qq-extension-test-'));
+const cache=path.join(dir,'Documents/Tencent Files');await fs.mkdir(cache,{recursive:true});
+const frames=await Promise.all(['red','green','blue'].map(background=>sharp({create:{width:12,height:8,channels:3,background}}).png().toBuffer()));
+const gif=await sharp(frames,{join:{animated:true}}).gif({delay:[100,200,300],loop:0}).toBuffer();
+const gifFile=path.join(cache,'favorite.jpg');await fs.writeFile(gifFile,gif); // Deliberately misleading extension.
+const p=await preview(gif);const meta=JSON.parse(p.content[0].text);
+assert.equal(meta.frame_count,3);assert.equal(meta.duration_ms,600);assert.equal(meta.width,12);assert.equal(meta.height,8);
+assert.equal(p.content.length,3);assert.ok(p.content.slice(1).every(x=>x.mimeType==='image/png'));
+const pixel=await sharp(Buffer.from(p.content[1].data,'base64')).raw().toBuffer();assert.equal(pixel[0],255);assert.equal(pixel[2],0);
+const sheet=await sharp(Buffer.from(p.content[2].data,'base64')).metadata();assert.equal(sheet.width,768);
+const sampled=await preview(gif,{mode:'frames',max_frames:2});assert.deepEqual(JSON.parse(sampled.content[0].text).sampled_frames,[1,3]);
+const lastPixel=await sharp(Buffer.from(sampled.content[2].data,'base64')).raw().toBuffer();assert.equal(lastPixel[2],255);
+
+let requests=[],own=true;let socket;
+const wss=new WebSocketServer({host:'127.0.0.1',port:0});await new Promise(r=>wss.once('listening',r));
+wss.on('connection',(ws,req)=>{assert.equal(req.headers.authorization,'Bearer event-test');socket=ws;});
+const mock=http.createServer(async(req,res)=>{
+ let body='';for await(const c of req)body+=c;const a=JSON.parse(body);requests.push({action:req.url,args:a});
+ let data={};
+ if(req.url==='/get_login_info')data={user_id:10000};
+ if(req.url==='/get_group_list')data=[{group_id:10001,group_name:'test'}];
+ if(req.url==='/get_msg')data={message_id:a.message_id,sender:{user_id:own?10000:10002}};
+ if(req.url==='/get_image')data={file:gifFile};
+ if(req.url==='/fetch_custom_face_detail')data=[{md5:'ABCDEF',emoPath:gifFile,desc:'test gif'}];
+ if(req.url==='/send_group_msg')data={message_id:42};
+ res.setHeader('Content-Type','application/json');res.end(JSON.stringify({status:'ok',retcode:0,data}));
+});await new Promise(r=>mock.listen(0,'127.0.0.1',r));
+const configFile=path.join(dir,'config.json');
+await fs.writeFile(configFile,JSON.stringify({network:{httpServers:[{name:'qq-mcp-local',enable:true,host:'127.0.0.1',port:mock.address().port,token:'test'}],websocketServers:[{name:'qq-mcp-events',enable:true,host:'127.0.0.1',port:wss.address().port,token:'event-test'}]}}));
+const client=new Client({name:'extensions-test',version:'1'});
+const transport=new StdioClientTransport({command:process.execPath,args:[path.resolve('server.mjs')],env:{...process.env,USERPROFILE:dir,QQ_EXPECTED_ACCOUNT:'10000',QQ_ONEBOT_CONFIG:configFile,QQ_LEDGER:path.join(dir,'ledger.json'),QQ_REPLY_CLAIMS:path.join(dir,'claims.json'),QQ_REPLY_LOG:path.join(dir,'flow.jsonl'),QQ_SEND_DELAY_MIN_MS:'0',QQ_SEND_DELAY_MAX_MS:'0'},stderr:'pipe'});
+const call=(name,args={})=>client.callTool({name,arguments:args});
+const data=r=>{assert.ok(!r.isError,r.content[0].text);return JSON.parse(r.content[0].text);};
+const send={target_type:'group',target_id:'10001',expected_name:'test',request_id:'extensions-image',send_reason:'proactive'};
+const msg=(id,extra={})=>({post_type:'message',self_id:10000,user_id:10002,message_type:'group',group_id:10001,message_id:id,message_seq:id,real_seq:String(100+Math.abs(id)),message:[{type:'at',data:{qq:'10000'}},{type:'text',data:{text:'test'}}],...extra});
+try {
+ await client.connect(transport);
+ const list=await client.listTools();assert.equal(list.tools.length,18);
+ const before=requests.length;
+ assert.ok((await call('qq_send_image',{...send,filename:'a.png',base64:frames[0].toString('base64')})).isError);
+ assert.ok((await call('qq_send_image',send)).isError);
+ assert.equal(requests.length,before,'XOR rejected before ANY NapCat request');
+ data(await call('qq_send_image',{...send,base64:frames[0].toString('base64'),reply_to:'-2',at_user_id:'10002'}));
+ assert.deepEqual(requests.at(-1).args.message.map(x=>x.type),['reply','at','image']);
+ own=false;assert.ok((await call('qq_recall_message',{message_id:'-2'})).isError);assert.equal(requests.filter(x=>x.action==='/delete_msg').length,0);
+ own=true;assert.deepEqual(data(await call('qq_recall_message',{message_id:'-2'})),{message_id:'-2',success:true});
+ const favorites=data(await call('qq_list_favorite_stickers'));assert.equal(favorites.items[0].type,'gif');
+ assert.equal(data(await call('qq_get_favorite_sticker',{sticker_id:'ABCDEF'})).frame_count,3);
+ assert.ok((await call('qq_get_favorite_sticker',{sticker_id:'not-a-favorite'})).isError);
+ assert.equal(data(await call('qq_read_image',{file:'some.gif'})).frame_count,3);
+ data(await call('qq_send_favorite_sticker',{...send,request_id:'extensions-favorite',sticker_id:'ABCDEF'}));
+ assert.equal(requests.at(-1).args.message[0].data.file,'base64://'+gif.toString('base64'));
+ const sentCount=requests.filter(x=>x.action==='/send_group_msg').length;
+ data(await call('qq_send_favorite_sticker',{...send,request_id:'extensions-favorite',sticker_id:'ABCDEF'}));
+ assert.equal(requests.filter(x=>x.action==='/send_group_msg').length,sentCount);
+ const start=Date.now();const empty=data(await call('qq_wait_for_message',{timeout_ms:1000}));
+ assert.ok(Date.now()-start>=950);assert.equal(empty.timed_out,true);assert.equal(empty.cursor_gap,false);
+ socket.send(JSON.stringify(msg(-10)));socket.send(JSON.stringify(msg(-10)));socket.send(JSON.stringify(msg(-9,{user_id:10003})));socket.send(JSON.stringify(msg(-8,{message:[{type:'text',data:{text:'not at me'}}]})));
+ const got=data(await call('qq_wait_for_message',{timeout_ms:1000,after_event_id:empty.next_cursor,only_at_me:true,user_id:'10002'}));
+ assert.deepEqual(got.messages.map(m=>m.message_id),[-10]);
+ const again=data(await call('qq_wait_for_message',{timeout_ms:1000,after_event_id:got.next_cursor}));assert.equal(again.messages.length,0);
+ const anchor=data(await call('qq_wait_for_message',{target_type:'group',target_id:'10001',after_message_seq:'-10',timeout_ms:1000}));assert.deepEqual(anchor.messages.map(m=>m.message_id),[-9,-8]);
+ const missing=data(await call('qq_wait_for_message',{target_type:'group',target_id:'10001',after_message_seq:'999',timeout_ms:1000}));assert.equal(missing.cursor_gap,true);
+ assert.equal(requests.filter(x=>x.action.includes('history')).length,0,'No history polling');
+ // Unit-level retention, restart, cancellation, and filtering checks.
+ const q=new Events(configFile,'10000',{capacity:2});q.connected=true;
+ const old=q.cursor(0);q.accept(msg(1));q.accept(msg(2));q.accept(msg(3));
+ assert.equal((await q.wait({after_event_id:old,timeout_ms:1})).cursor_gap,true);
+ assert.equal((await q.wait({after_event_id:'other:0:0',timeout_ms:1})).cursor_gap,true);
+ const ctrl=new AbortController();const cancelled=q.wait({timeout_ms:1000},ctrl.signal);ctrl.abort();await assert.rejects(cancelled,/取消/);
+ assert.equal(q.matches(msg(1),{event_types:['image']}),false);
+ const beforeDisconnect=(await call('qq_status'));const cur=data(beforeDisconnect).events.cursor;
+ socket.close();await new Promise(r=>setTimeout(r,100));
+ assert.equal(data(await call('qq_wait_for_message',{after_event_id:cur,timeout_ms:1000})).cursor_gap,true);
+ console.log(JSON.stringify({status:'passed',checks:['GIF first/last pixels and duration','bounded frame sheet','XOR preflight before API','image reply and at','recall ownership','real favorite API and original GIF bytes','favorite send dedup','event timeout and signed anchors','event filter/dedup/cursor/overflow/disconnect/cancel','no history polling'],realQQWrites:0}));
+}finally{await client.close();for(const ws of wss.clients)ws.terminate();await new Promise(r=>wss.close(r));await new Promise(r=>mock.close(r));}

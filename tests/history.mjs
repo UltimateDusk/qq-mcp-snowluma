@@ -1,0 +1,12 @@
+import assert from 'node:assert/strict';
+import {historyParams,historyResult} from '../history.mjs';
+const a={target_type:'group',target_id:'12345',count:20};
+assert.deepEqual(historyParams(a),{group_id:'12345',count:20});
+assert.deepEqual(historyParams({...a,message_id:'-123'}),{group_id:'12345',count:20,message_id:-123});
+assert.deepEqual(historyParams({...a,target_type:'private',message_id:'25'}),{user_id:'12345',count:20,message_id:25});
+assert.throws(()=>historyParams({...a,message_seq:'123'}),/message_seq/);
+assert.throws(()=>historyParams({...a,message_id:'999999999999999999'}),/32/);
+assert.throws(()=>historyResult({},a,x=>x),/messages/);
+const empty=historyResult({messages:[]},a,x=>x);assert.equal(empty.history_complete,false);assert.equal(empty.status,'empty_or_unavailable');assert.equal(empty.next_message_id,null);
+const page=historyResult({messages:[{message_id:-23},{message_id:45}]},a,x=>x);assert.equal(page.next_message_id,'-23');assert.equal(page.messages.length,2);
+console.log('PASS SnowLuma history signed anchors, legacy rejection, empty-result warning and pagination');

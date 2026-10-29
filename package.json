@@ -1,0 +1,32 @@
+{
+  "name": "qq-mcp-snowluma",
+  "version": "1.6.0",
+  "description": "A safety-focused MCP server for controlling a local QQ session through SnowLuma and OneBot v11.",
+  "type": "module",
+  "private": true,
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/UltimateDusk/qq-mcp-snowluma.git"
+  },
+  "homepage": "https://github.com/UltimateDusk/qq-mcp-snowluma#readme",
+  "bugs": {
+    "url": "https://github.com/UltimateDusk/qq-mcp-snowluma/issues"
+  },
+  "keywords": ["mcp", "qq", "snowluma", "onebot", "chatgpt"],
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node server.mjs",
+    "test": "node tests/send-pacing.mjs && node tests/history.mjs && node tests/snow-media.mjs && node tests/reply-claims.mjs && node tests/flow-control.mjs && node tests/verify.mjs && node tests/extensions.mjs && node tests/stability.mjs",
+    "test:quick": "node tests/send-pacing.mjs && node tests/history.mjs && node tests/reply-claims.mjs && node tests/flow-control.mjs && node tests/verify.mjs",
+    "verify:live": "node tests/verify.mjs --live"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "sharp": "0.35.5",
+    "ws": "8.22.0",
+    "zod": "4.6.7"
+  }
+}

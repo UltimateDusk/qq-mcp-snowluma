@@ -1,0 +1,11 @@
+node_modules/
+config/local.ps1
+data/*
+!data/.gitkeep
+outbox/*
+!outbox/.gitkeep
+*.log
+*.pid
+*.zip
+.DS_Store
+Thumbs.db
