@@ -36,7 +36,7 @@ SnowLuma ── 已登录的 QQ 客户端
 - 持续聊天 `flow_id` lease、主动开场 `dedupe_key`、严格 deadline 与柔性 duration。
 - 按可见字数随机等待 5–13 秒；无文字收藏表情固定等待 5 秒。
 
-完整的 18 个工具见 [工具说明](docs/TOOLS.md)，持续聊天参数见 [Flow 控制](docs/FLOW_CONTROL.md)。
+完整的 18 个工具见 [工具说明](docs/TOOLS.md)，持续聊天参数见 [Flow 控制](docs/FLOW_CONTROL.md)。需要从零配置时，可以直接下载 [Word 版安装与使用教程](docs/QQ-MCP-for-SnowLuma-安装与使用教程.docx)。
 
 ## 系统要求
 
