@@ -34,13 +34,13 @@ Authorization: <data/http-authorization.txt 的完整一行>
 4. 让隧道的本地请求携带 MCP HTTP Bearer；OpenAI Runtime Key、Tunnel ID 和 Bearer 分别保存，不写入仓库。
 5. 启动 profile，确认本地 `scripts/check.ps1` 和隧道健康页都 ready。
 6. 回到 ChatGPT 扫描或刷新工具；应显示 18 个 `qq_*` 工具。
-7. 新开对话，选择或 `@QQ`，先调用 `qq_status` 做只读验证。
+7. 回到原来的对话，重新选择或 `@QQ`，先调用 `qq_status` 做只读验证。若原对话仍使用旧工具 schema，再新开对话排障。
 
 Secure MCP Tunnel 的具体 CLI 参数由 OpenAI 客户端版本决定，因此本仓库不硬编码可能过期的命令。按你创建 Tunnel 时页面生成的官方命令配置。
 
 ## 更新工具后
 
-MCP 代码更新不会自动刷新 ChatGPT 已冻结的工具 schema。请在应用管理页执行 **Refresh/Scan Tools**，再新开对话。工具仍是 18 个时，不代表没更新；可检查某个工具是否出现新参数，例如 `flow_target_duration_ms`。
+MCP 代码更新不会自动刷新 ChatGPT 保存的工具 schema。请在应用管理页执行 **Refresh/Scan Tools**，回到原来的对话并重新 `@QQ`；实测无需专门新建对话。工具仍是 18 个时，不代表没更新，可检查某个工具是否出现新参数，例如 `flow_target_duration_ms`。如果原对话仍显示旧参数、找不到工具或调用继续报旧版参数错误，再新开对话作为备用排障步骤。
 
 ## 不要这样做
 

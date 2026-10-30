@@ -14,7 +14,7 @@ MCP 检测到 SnowLuma 暴露的 QQ 与 `QQ_EXPECTED_ACCOUNT` 不同。停止 MC
 
 ## ChatGPT 只有旧工具
 
-服务端代码与 ChatGPT 工具快照是两层。确认本地进程已重启且 tunnel ready，然后在应用管理页 Refresh/Scan Tools，再新开对话。当前版本工具数量为 18。
+服务端代码与 ChatGPT 工具快照是两层。确认本地进程已重启且 tunnel ready，然后在应用管理页 Refresh/Scan Tools，回到原对话并重新 `@QQ`。实测无需专门新建对话；如果原对话仍显示旧参数或找不到工具，再新开对话排障。当前版本工具数量为 18。
 
 ## 群历史为空
 
