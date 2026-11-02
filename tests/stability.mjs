@@ -25,7 +25,8 @@ const mock=http.createServer(async(req,res)=>{
  if(req.url==='/get_group_list')data=[10001,10002,10003].map(group_id=>({group_id,group_name:'group-'+group_id}));
  if(req.url==='/get_friend_list')data=[{user_id:10004,nickname:'friend'}];
  if(req.url==='/get_group_member_list')data=[{user_id:10005}];
- if(req.url==='/get_msg')data={message_id:a.message_id,user_id:10005,message:[{type:'image',data:{file:'received.png'}}]};
+ if(req.url==='/get_msg')data={message_id:a.message_id,group_id:10001,user_id:10005,message:[{type:'image',data:{file:'received.png'}}]};
+ if(req.url==='/get_msg'&&a.message_id==='cross-peer')data={message_id:a.message_id,group_id:10002,user_id:10005,message:[{type:'text',data:{text:'private-context-marker'}}]};
  if(req.url==='/get_image')data={file:a.file.endsWith('gif')?gifFile:pngFile};
  if(req.url==='/fetch_custom_face_detail')data=favorites;
  if(req.url==='/add_custom_face'){
@@ -137,6 +138,8 @@ try{
  assert.ok((await call('qq_wait_for_message',{...rollArgs,flow_rolling:true,flow_duration_ms:1000})).isError);
  const manualEnd=data(await call('qq_wait_for_message',{...rollArgs,flow_lease_token:roll.chat_flow.flow_lease_token,flow_end_reason:'manual_end'}));assert.equal(manualEnd.ended_reason,'manual_end');
  const typing=data(await call('qq_send_text',{target_type:'private',target_id:'10004',expected_name:'friend',request_id:'typing-send-test',send_reason:'proactive',text:'test',show_typing:true}));assert.equal(typing.status,'sent');assert.equal(typing.typing.status,'requested');assert.equal(actions.filter(x=>x==='/set_input_status').length,2);
+ const crossCursor=data(await call('qq_status')).events.cursor;const cross=message();cross.message=[{type:'reply',data:{id:'cross-peer'}}];push(cross);
+ const crossBatch=data(await call('qq_wait_for_message',{target_type:'group',target_id:'10001',after_event_id:crossCursor,timeout_ms:1000,batch_window_ms:0}));assert.equal(crossBatch.events[0].reply_context.status,'unavailable');assert.ok(!JSON.stringify(crossBatch).includes('private-context-marker'));
  const diskCache=JSON.parse(await fs.readFile(path.join(dir,'events.json'),'utf8'));assert.ok(diskCache.rows.length>0);assert.equal(diskCache.session,initial.split(':')[0]);
  const restartCursor=data(await call('qq_status')).events.cursor;push(message());
  const beforeRestart=data(await call('qq_wait_for_message',{target_type:'group',target_id:'10001',after_event_id:restartCursor,timeout_ms:1000,batch_window_ms:0}));assert.equal(beforeRestart.events.length,1);

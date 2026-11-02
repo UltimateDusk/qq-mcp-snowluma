@@ -182,8 +182,10 @@ async function attachReplyContext(batch,signal){
     try{
       if(!cache.has(String(ref)))cache.set(String(ref),await api('get_msg',{message_id:String(ref)},{signal:signal?AbortSignal.any([signal,AbortSignal.timeout(1200)]):AbortSignal.timeout(1200)}));
       const m=cache.get(String(ref));
-      if(m.group_id!=null&&String(m.group_id)!==String(event.group_id))throw Error('reply_context_target_mismatch');
       const user=String(m.sender?.user_id??m.user_id??'');
+      const ownInPeer=policy.sent.has(`${event.target_type}:${event.target_id}:${ref}`)&&user===account;
+      const samePeer=event.target_type==='group'?String(m.group_id??'')===String(event.target_id):m.group_id==null&&user===String(event.target_id);
+      if(!samePeer&&!ownInPeer)throw Error('reply_context_target_unverified');
       const body=(Array.isArray(m.message)?m.message:[]).map(s=>s.type==='text'?String(s.data?.text||''):'['+s.type+']').join('').slice(0,2000);
       event.reply_context={status:'ok',message_id:String(ref),user_id:user,text:body};
       if(user===account){event.priority='high';event.priority_reason='reply_to_me';}
