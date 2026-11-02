@@ -9,6 +9,10 @@ $env:QQ_MCP_NODE = 'D:\SnowLuma\app\node.exe'
 
 # Optional settings:
 # $env:QQ_API_TIMEOUT_MS = '15000'
-# $env:QQ_SEND_DELAY_MIN_MS = '5000'
-# $env:QQ_SEND_DELAY_MAX_MS = '13000'
+# $env:QQ_SEND_DELAY_MIN_MS = '8000'
+# $env:QQ_SEND_DELAY_MAX_MS = '40000'
 # $env:QQ_MEDIA_ROOTS = 'D:\SnowLuma\app\cache'
+
+# Optional comma-separated AI account IDs; unknown users are not assumed human.
+# $env:QQ_AI_USER_IDS = '100002,100003'
+# $env:QQ_EVENT_STATE = "$PSScriptRoot\..\data\events.json"

@@ -40,7 +40,7 @@ const mock=http.createServer(async(req,res)=>{
 const configFile=path.join(dir,'config.json');
 await fs.writeFile(configFile,JSON.stringify({network:{httpServers:[{name:'qq-mcp-local',enable:true,host:'127.0.0.1',port:mock.address().port,token:'test'}],websocketServers:[{name:'qq-mcp-events',enable:true,host:'127.0.0.1',port:wss.address().port,token:'event-test'}]}}));
 const client=new Client({name:'extensions-test',version:'1'});
-const transport=new StdioClientTransport({command:process.execPath,args:[path.resolve('server.mjs')],env:{...process.env,USERPROFILE:dir,QQ_EXPECTED_ACCOUNT:'10000',QQ_ONEBOT_CONFIG:configFile,QQ_LEDGER:path.join(dir,'ledger.json'),QQ_REPLY_CLAIMS:path.join(dir,'claims.json'),QQ_REPLY_LOG:path.join(dir,'flow.jsonl'),QQ_SEND_DELAY_MIN_MS:'0',QQ_SEND_DELAY_MAX_MS:'0'},stderr:'pipe'});
+const transport=new StdioClientTransport({command:process.execPath,args:[path.resolve('server.mjs')],env:{...process.env,QQ_MCP_DATA_DIR:dir,USERPROFILE:dir,QQ_EXPECTED_ACCOUNT:'10000',QQ_ONEBOT_CONFIG:configFile,QQ_LEDGER:path.join(dir,'ledger.json'),QQ_REPLY_CLAIMS:path.join(dir,'claims.json'),QQ_REPLY_LOG:path.join(dir,'flow.jsonl'),QQ_SEND_DELAY_MIN_MS:'0',QQ_SEND_DELAY_MAX_MS:'0'},stderr:'pipe'});
 const call=(name,args={})=>client.callTool({name,arguments:args});
 const data=r=>{assert.ok(!r.isError,r.content[0].text);return JSON.parse(r.content[0].text);};
 const send={target_type:'group',target_id:'10001',expected_name:'test',request_id:'extensions-image',send_reason:'proactive'};

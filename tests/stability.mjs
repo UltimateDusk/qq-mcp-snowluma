@@ -43,7 +43,8 @@ let ws;wss.on('connection',s=>{ws=s;});
 const temporary=net.createServer();await new Promise(r=>temporary.listen(0,'127.0.0.1',r));const port=temporary.address().port;await new Promise(r=>temporary.close(r));
 const configFile=path.join(dir,'config.json'),authFile=path.join(dir,'http-auth.txt');const authorization='Bearer '+randomBytes(32).toString('hex');await fs.writeFile(authFile,authorization);
 await fs.writeFile(configFile,JSON.stringify({networks:{httpServers:[{name:'qq-mcp-local',enabled:true,path:'/',host:'127.0.0.1',port:mock.address().port,accessToken:'test'}],wsServers:[{name:'qq-mcp-events',enabled:true,path:'/',host:'127.0.0.1',port:wss.address().port,accessToken:'test'}]}}));
-const child=spawn(process.execPath,['server.mjs'],{cwd:path.resolve('.'),env:{...process.env,USERPROFILE:dir,QQ_EXPECTED_ACCOUNT:'10000',QQ_ONEBOT_CONFIG:configFile,QQ_LEDGER:path.join(dir,'ledger.json'),QQ_REPLY_CLAIMS:path.join(dir,'claims.json'),QQ_REPLY_LOG:path.join(dir,'flow.jsonl'),QQ_FLOW_STATE:path.join(dir,'chat-flows.json'),QQ_SEND_DELAY_MIN_MS:'0',QQ_SEND_DELAY_MAX_MS:'0',QQ_MCP_HTTP_PORT:String(port),QQ_MCP_AUTH_FILE:authFile,QQ_API_TIMEOUT_MS:'500'},stdio:['ignore','ignore','pipe'],windowsHide:true});
+const launchServer=()=>spawn(process.execPath,['server.mjs'],{cwd:path.resolve('.'),env:{...process.env,QQ_MCP_DATA_DIR:dir,USERPROFILE:dir,QQ_EXPECTED_ACCOUNT:'10000',QQ_ONEBOT_CONFIG:configFile,QQ_LEDGER:path.join(dir,'ledger.json'),QQ_REPLY_CLAIMS:path.join(dir,'claims.json'),QQ_REPLY_LOG:path.join(dir,'flow.jsonl'),QQ_FLOW_STATE:path.join(dir,'chat-flows.json'),QQ_SEND_DELAY_MIN_MS:'0',QQ_SEND_DELAY_MAX_MS:'0',QQ_MCP_HTTP_PORT:String(port),QQ_MCP_AUTH_FILE:authFile,QQ_API_TIMEOUT_MS:'500'},stdio:['ignore','ignore','pipe'],windowsHide:true});
+let child=launchServer();
 let stderr='';child.stderr.on('data',b=>stderr+=b);
 let rpcId=0;
 const rpc=async(method,params={},options={})=>{
@@ -61,7 +62,7 @@ try{
  for(let n=0;n<100;n++){try{const r=await fetch(`http://127.0.0.1:${port}/health`,{headers:{Authorization:authorization}});if(r.ok)break;}catch{}if(n===99)throw Error('Host startup failed '+stderr);await sleep(50);}
  const tools=await rpc('tools/list');assert.equal(tools.tools.length,18); // Operational request before initialize is valid in stateless HTTP.
  for(let n=0;n<3;n++)await rpc('initialize',{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'reconnecting-test',version:'1'}});
- const startStatus=data(await call('qq_status'));assert.ok(startStatus.events.connected);assert.equal(startStatus.mcp.version,'1.6.1');assert.equal(startStatus.mcp.flow_control.enabled,true);assert.equal(startStatus.mcp.flow_control.soft_duration,true);const initial=startStatus.events.cursor;
+ const startStatus=data(await call('qq_status'));assert.ok(startStatus.events.connected);assert.equal(startStatus.mcp.version,'1.7.0');assert.equal(startStatus.mcp.flow_control.enabled,true);assert.equal(startStatus.mcp.flow_control.soft_duration,true);const initial=startStatus.events.cursor;
  const a=message(10001),b=message(10002),noise=message(10003),p=message(10004);for(const e of [a,b,noise,p,a,poke(),poke(),poke(10004)])push(e);
  const filter={target_ids:[{target_type:'group',target_id:'10001'},{target_type:'group',target_id:'10002'},{target_type:'private',target_id:'10004'}],timeout_ms:1000};
  let batch=data(await call('qq_wait_for_message',{...filter,after_event_id:initial}));assert.equal(batch.events.length,6);assert.equal(batch.messages.length,3);assert.equal(batch.events.filter(e=>e.event_type==='poke').length,3);assert.equal(batch.cursor_gap,false);assert.ok(batch.events.some(e=>e.operator_id==='10004'&&e.target_type==='private'));
@@ -122,6 +123,31 @@ try{
  favorites=favorites.filter(r=>r.emoPath!==pngFile);unsupported=true;assert.equal(data(await call('qq_add_favorite_sticker',{file:'received.png'})).status,'unsupported');unsupported=false;
  checks.push('group/private poke validation and dedup','favorite provenance and confirmed add','favorite unsupported is explicit');
  const q=new Events(configFile,'10000',{capacity:2});q.connected=true;const c=q.cursor(0);for(let n=0;n<10;n++)q.accept(message(10003));q.accept(message(10001));const r=await q.wait({after_event_id:c,target_ids:[{target_type:'group',target_id:'10001'}],timeout_ms:1});assert.equal(r.cursor_gap,false);assert.equal(r.events.length,1);checks.push('filtered-out overflow does not create false gap');
+ // New rolling workflow through the real MCP transport; batch order and claims stay intact.
+ const rollingStart=data(await call('qq_status')).events.cursor;
+ const rollArgs={target_type:'group',target_id:'10001',flow_id:'rolling-integration',execution_id:'rolling-execution',timeout_ms:1000,batch_window_ms:80};
+ const rollWait=call('qq_wait_for_message',{...rollArgs,after_event_id:rollingStart});await sleep(40);
+ const low=message(),high=message(),reply=message();low.message=[{type:'text',data:{text:'哈哈'}}];high.message=[{type:'at',data:{qq:'10000'}},{type:'text',data:{text:'怎么做？'}}];reply.message=[{type:'reply',data:{id:'100'}}];
+ push(low);push(high);push(reply);const roll=data(await rollWait);
+ assert.equal(roll.chat_flow.mode,'rolling');assert.equal(roll.events.length,3);assert.equal(roll.reply_order[0],roll.events[1].event_id);assert.equal(roll.events[2].reply_context.status,'ok');
+ assert.deepEqual(roll.events.map(e=>e.message_id),[low.message_id,high.message_id,reply.message_id]);
+ const mergedReply=data(await call('qq_send_text',{...rollArgs,expected_name:'group-10001',flow_lease_token:roll.chat_flow.flow_lease_token,request_id:'rolling-merged-send',send_reason:'reply',reply_tokens:roll.events.map(e=>e.reply_token),text:'one reply to the batch'}));assert.equal(mergedReply.status,'sent');assert.ok(mergedReply.pacing);assert.equal(mergedReply.reply_protection.claimed,true);
+ const renewed=data(await call('qq_wait_for_message',{...rollArgs,flow_lease_token:roll.chat_flow.flow_lease_token,after_event_id:roll.next_cursor,flow_renew:true,flow_activity_observation:'human_active'}));assert.equal(renewed.chat_flow.renewal_count,1);
+ const deniedRenew=data(await call('qq_wait_for_message',{...rollArgs,flow_lease_token:roll.chat_flow.flow_lease_token,after_event_id:renewed.next_cursor,flow_renew:true}));assert.equal(deniedRenew.blocked_reason,'renew_requires_new_activity');assert.equal(deniedRenew.next_cursor,renewed.next_cursor);assert.equal(deniedRenew.ended_reason,null);
+ assert.ok((await call('qq_wait_for_message',{...rollArgs,flow_rolling:true,flow_duration_ms:1000})).isError);
+ const manualEnd=data(await call('qq_wait_for_message',{...rollArgs,flow_lease_token:roll.chat_flow.flow_lease_token,flow_end_reason:'manual_end'}));assert.equal(manualEnd.ended_reason,'manual_end');
+ const typing=data(await call('qq_send_text',{target_type:'private',target_id:'10004',expected_name:'friend',request_id:'typing-send-test',send_reason:'proactive',text:'test',show_typing:true}));assert.equal(typing.status,'sent');assert.equal(typing.typing.status,'requested');assert.equal(actions.filter(x=>x==='/set_input_status').length,2);
+ const diskCache=JSON.parse(await fs.readFile(path.join(dir,'events.json'),'utf8'));assert.ok(diskCache.rows.length>0);assert.equal(diskCache.session,initial.split(':')[0]);
+ const restartCursor=data(await call('qq_status')).events.cursor;push(message());
+ const beforeRestart=data(await call('qq_wait_for_message',{target_type:'group',target_id:'10001',after_event_id:restartCursor,timeout_ms:1000,batch_window_ms:0}));assert.equal(beforeRestart.events.length,1);
+ const exited=new Promise(resolve=>child.once('exit',resolve));child.kill();await exited;
+ child=launchServer();child.stderr.on('data',b=>stderr+=b);
+ for(let n=0;n<100;n++){try{const health=await fetch(`http://127.0.0.1:${port}/health`,{headers:{Authorization:authorization}});if(health.ok)break;}catch{}await sleep(50);}
+ const afterRestart=data(await call('qq_wait_for_message',{target_type:'group',target_id:'10001',after_event_id:restartCursor,timeout_ms:1000,batch_window_ms:0}));
+ assert.equal(afterRestart.events.length,1);assert.equal(afterRestart.events[0].message_id,beforeRestart.events[0].message_id);assert.equal(afterRestart.cursor_gap,true);
+ assert.equal(data(await call('qq_status')).chat_flows.find(x=>x.flow_id==='rolling-integration').ended_reason,'manual_end');
+ checks.push('actual server restart preserves buffered message and flow state');
+ checks.push('rolling default/renew/old-batch denial through MCP','batch priorities preserve cursor order','reply context auto-fetch','merged token claims','typing set/clear','event cache persisted before response');
  const finish=Date.now()+minutes*60000;const began=Date.now();let cycles=0,received=0,reconnects=1;const seen=new Set();
  cursor=data(await call('qq_status')).events.cursor;
  const save=async(status)=>{const summary={status,minutes_requested:minutes,elapsed_seconds:Math.round((Date.now()-began)/1000),cycles,received,reconnects,checks,realQQWrites:0};if(report)await fs.writeFile(report,JSON.stringify(summary,null,2));return summary;};

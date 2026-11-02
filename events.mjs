@@ -1,18 +1,41 @@
 import {randomUUID} from 'node:crypto';
 import {EventEmitter} from 'node:events';
 import fs from 'node:fs/promises';
+import path from 'node:path';
 import WebSocket from 'ws';
 import {endpoint} from './backend.mjs';
 
 // OneBot's message_seq can be a signed hash. Ordering belongs to this queue.
 export class Events {
-  constructor(configFile,account,{capacity=1000,ttl=1800000}={}) {
-    Object.assign(this,{configFile,account,capacity,ttl});
+  constructor(configFile,account,{capacity=1000,ttl=1800000,stateFile}={}) {
+    Object.assign(this,{configFile,account,capacity,ttl,stateFile});this.saveQueue=Promise.resolve();this.restoreDone=false;this.persistenceError=null;
     this.session=randomUUID();this.seq=0;this.floor=0;this.rows=[];this.seen=new Map();this.evicted=new Map();this.evictionFloor=0;this.bytes=0;
     this.bus=new EventEmitter();this.bus.setMaxListeners(40);
     this.connected=false;this.stopped=false;this.generation=0;this.delay=1000;
+    if(this.stateFile){this.pruneTimer=setInterval(()=>{this.prune();void this.persist();},60000);this.pruneTimer.unref();}
   }
-  status(){return {connected:this.connected,cursor:this.cursor(this.seq),buffered:this.rows.length,connection_generation:this.generation,retention_limit:this.capacity,retention_ms:this.ttl};}
+  status(){return {connected:this.connected,cursor:this.cursor(this.seq),buffered:this.rows.length,connection_generation:this.generation,retention_limit:this.capacity,retention_ms:this.ttl,persistent_cache:Boolean(this.stateFile),persistence_error:this.persistenceError};}
+  async restore(){
+    if(this.restoreDone)return;this.restoreDone=true;if(!this.stateFile)return;
+    try{
+      if((await fs.stat(this.stateFile)).size>32*1024*1024)throw Error('cache_too_large');
+      const s=JSON.parse(await fs.readFile(this.stateFile,'utf8'));
+      if(s.account!==this.account||!Array.isArray(s.rows)||typeof s.session!=='string'||!Number.isSafeInteger(s.seq))throw Error('cache_invalid');
+      this.session=s.session;this.seq=s.seq;this.generation=(s.generation||0)+1;this.floor=s.floor||0;this.evictionFloor=s.evictionFloor||0;this.evicted=new Map(s.evicted||[]);this.rows=s.rows;
+      this.bytes=this.rows.reduce((n,r)=>n+r.bytes,0);this.seen=new Map(this.rows.map(r=>[r.key,true]));this.prune();
+    }catch(e){if(e.code!=='ENOENT')this.persistenceError='cache_restore_failed_history_required';}
+  }
+  persist(){
+    if(!this.stateFile)return Promise.resolve();this.saveDirty=true;
+    if(this.savePending)return this.savePending;
+    this.savePending=(async()=>{
+      try{while(this.saveDirty){
+        this.saveDirty=false;this.prune();
+        const snapshot=JSON.stringify({account:this.account,session:this.session,seq:this.seq,generation:this.generation,floor:this.floor,evictionFloor:this.evictionFloor,evicted:[...this.evicted],rows:this.rows});
+        await fs.mkdir(path.dirname(this.stateFile),{recursive:true});await fs.writeFile(this.stateFile+'.tmp',snapshot,'utf8');await fs.rename(this.stateFile+'.tmp',this.stateFile);this.persistenceError=null;
+      }}catch{this.persistenceError='cache_write_failed';}
+    })().finally(()=>{this.savePending=null;});return this.savePending;
+  }
   cursor(n){return `${this.session}:${n}:${this.generation}`;}
   prune(){while(this.rows.length && (this.rows.length>this.capacity || this.bytes>16*1024*1024 || Date.now()-this.rows[0].received>this.ttl)){const r=this.rows.shift();this.floor=r.seq;this.bytes-=r.bytes;this.seen.delete(r.key);this.evicted.delete(r.peer);this.evicted.set(r.peer,r.seq);if(this.evicted.size>4096){const [key,seq]=this.evicted.entries().next().value;this.evictionFloor=Math.max(this.evictionFloor,seq);this.evicted.delete(key);}}}
   lostAfter(pos,a){const targets=a.target_ids||(a.target_type?[{target_type:a.target_type,target_id:a.target_id}]:null);return targets?pos<this.evictionFloor||targets.some(t=>pos<(this.evicted.get(`${t.target_type}:${t.target_id}`)||0)):pos<this.floor;}
@@ -35,7 +58,7 @@ export class Events {
     const key=poke?`${peer}:poke:${e.source_event_id??randomUUID()}`:`${peer}:message:${e.message_id}`;
     this.prune();if(this.seen.has(key))return;
     const bytes=Buffer.byteLength(JSON.stringify(e));this.bytes+=bytes;
-    this.seen.set(key,true);this.rows.push({seq:++this.seq,key,peer,bytes,received:Date.now(),event:e});this.prune();this.bus.emit('change');
+    this.seen.set(key,true);this.rows.push({seq:++this.seq,key,peer,bytes,received:Date.now(),event:e});this.prune();void this.persist();this.bus.emit('change');
   }
   async start(){
     if(this.stopped || this.connecting || this.ws?.readyState===WebSocket.OPEN)return;
@@ -50,11 +73,11 @@ export class Events {
       ws.on('open',()=>{this.connected=true;this.delay=1000;this.bus.emit('change');});
       ws.on('message',b=>{lastSeen=Date.now();try{this.accept(JSON.parse(b.toString()));}catch{}});
       ws.on('error',()=>{});
-      ws.on('close',()=>{clearInterval(heartbeat);this.connected=false;this.generation++;this.bus.emit('change');this.retry();});
+      ws.on('close',()=>{clearInterval(heartbeat);this.connected=false;this.generation++;void this.persist();this.bus.emit('change');this.retry();});
     } catch {this.retry();} finally {this.connecting=false;}
   }
   retry(){if(this.stopped)return;clearTimeout(this.retryTimer);this.retryTimer=setTimeout(()=>this.start(),this.delay);this.retryTimer.unref();this.delay=Math.min(30000,this.delay*2);}
-  close(){this.stopped=true;clearTimeout(this.retryTimer);this.ws?.terminate();this.bus.emit('change');}
+  close(){this.stopped=true;clearTimeout(this.retryTimer);clearInterval(this.pruneTimer);this.ws?.terminate();this.bus.emit('change');}
   matches(e,a){
     const type=e.target_type||e.message_type,target=String(e.target_id??e.group_id??e.user_id);
     if(a.target_type && (type!==a.target_type || target!==a.target_id))return false;
@@ -82,7 +105,7 @@ export class Events {
       if(signal?.aborted)throw Error('等待已取消。');
       this.prune();if(this.lostAfter(pos,a)){gap=true;reason='event_buffer_overflow';}
       found=this.rows.filter(r=>r.seq>pos&&this.matches(r.event,a));
-      if(found.length && batchUntil===null)batchUntil=Math.min(deadline,Date.now()+200);
+      if(found.length && batchUntil===null)batchUntil=Math.min(deadline,Date.now()+(a.batch_window_ms??200));
       const remaining=Math.min(deadline,batchUntil??deadline)-Date.now();
       if(remaining<=0 || found.length>=100 || this.stopped || gap)break;
       await new Promise((resolve,reject)=>{
@@ -95,6 +118,7 @@ export class Events {
     if(!this.connected){gap=true;reason=reason||'event_connection_unavailable';}
     const selected=found.slice(0,100),end=found.length>100?selected.at(-1).seq:this.seq;
     const batch=selected.map(r=>({...r.event,event_id:this.cursor(r.seq)}));const messages=batch.filter(e=>e.event_type==='message');
+    await this.persist();if(this.persistenceError){gap=true;reason=this.persistenceError;}
     return {events:batch,messages,latest_message_seq:a.target_type&&messages.length?String(messages.at(-1).message_seq??messages.at(-1).message_id):null,next_cursor:this.cursor(end),timed_out:!gap&&!selected.length,connected:this.connected,connection_generation:this.generation,cursor_gap:gap,gap_reason:reason,history_check_required:gap,more_available:found.length>100};
   }
 }

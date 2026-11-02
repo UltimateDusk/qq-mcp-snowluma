@@ -1,6 +1,6 @@
 # 工具说明
 
-服务版本 1.6.0 暴露 18 个工具。
+服务版本 1.7.0 暴露 18 个工具。
 
 | 工具 | 类型 | 用途 |
 |---|---|---|
@@ -48,8 +48,12 @@
 }
 ```
 
-`cursor_gap: true` 或 `history_check_required: true` 表示断线、重启或缓存过期可能造成缺口，需要按相关会话读取历史补查。cursor 只在当前 MCP 进程内有效。
+`cursor_gap: true` 或 `history_check_required: true` 表示断线、重启或缓存过期可能造成缺口，需要按相关会话读取历史补查。1.7.0 的 cursor 在已持久化事件的保留窗口内可跨进程恢复，重启仍提示检查历史缺口。
 
 ## 收藏写入
 
 `qq_add_favorite_sticker.file` 必须来自最近一小时内通过历史、单条消息或 wait 读到的 `image` 段。工具拒绝任意本地路径和 URL。SnowLuma/QQ 若不支持真正写入收藏，会返回 `unsupported` 或 `unknown`，不会伪造成功。
+
+## 1.7 新增参数
+
+滚动续期、AI 互聊评估、8–40 秒延迟、消息合并、批内优先级、回复正文补齐、图片 fallback 和私聊 typing 见 [持续聊天策略](ADAPTIVE_CHAT.md)。工具数量仍为 18。

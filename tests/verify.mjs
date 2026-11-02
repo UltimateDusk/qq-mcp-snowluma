@@ -20,7 +20,7 @@ if(!live){
     else if(req.url==='/send_group_msg'||req.url==='/send_private_msg'){if(failSend){res.writeHead(500);res.end();return;}data={message_id:777};}
     res.setHeader('Content-Type','application/json');res.end(JSON.stringify({status:'ok',retcode:0,data}));
   });await new Promise(r=>mock.listen(0,'127.0.0.1',r));
-  env.QQ_ONEBOT_CONFIG=path.join(dir,'config.json');env.QQ_LEDGER=path.join(dir,'ledger.json');env.QQ_REPLY_CLAIMS=path.join(dir,'claims.json');env.QQ_REPLY_LOG=path.join(dir,'flow.jsonl');
+  env.QQ_MCP_DATA_DIR=dir;env.QQ_ONEBOT_CONFIG=path.join(dir,'config.json');env.QQ_LEDGER=path.join(dir,'ledger.json');env.QQ_REPLY_CLAIMS=path.join(dir,'claims.json');env.QQ_REPLY_LOG=path.join(dir,'flow.jsonl');
   await fs.writeFile(env.QQ_ONEBOT_CONFIG,JSON.stringify({network:{httpServers:[{name:'qq-mcp-local',enable:true,host:'127.0.0.1',port:mock.address().port,token:'test-only'}]}}));
 }
 const client=new Client({name:'qq-verifier',version:'1.0.0'});

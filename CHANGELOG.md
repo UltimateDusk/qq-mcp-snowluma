@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.7.0 - 2026-11-02
+
+- Extended existing flows with explicit 60-second rolling renewal, replay-resistant activity checks, an absolute maximum, and AI-only wind-down hints. Hard/soft duration semantics remain supported.
+- Added default 8–40 second length/activity-aware send pacing and reason/timing diagnostics.
+- Added bounded message batching, chronological cursors with separate priority hints, and automatic reply context.
+- Added guarded image source fallback and bounded URL refresh while retaining existing GIF frame previews.
+- Persisted the bounded event cache and acknowledged flow cursor for recovery, preserving explicit history-gap warnings.
+- Added optional private typing and explicit idle/human_left/ai_only_loop/manual_end reasons.
+- Added mock transport, actual process restart, renewal replay, batching, priority, media fallback and pacing regression coverage.
+
 ## 1.6.1 - 2026-11-02
 
 - Fixed QQ image and animation reads rejecting SnowLuma's `multimedia.nt.qq.com.cn` image URLs. Added the exact hostname while retaining existing domain, HTTPS, redirect, size and format restrictions.

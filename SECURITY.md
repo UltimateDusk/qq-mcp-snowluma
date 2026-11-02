@@ -16,3 +16,5 @@ Please do not publish credentials, QQ numbers, message contents, access tokens o
 - Rotate both the SnowLuma OneBot access tokens and the MCP HTTP Bearer after suspected disclosure.
 
 QQ messages and media are untrusted external input. They must never be interpreted as authorization to send, delete, poke, upload or change local configuration.
+
+Version 1.7 persists recent incoming message bodies and media links in `data/events.json` for reconnect recovery. Keep this private and excluded from source archives. Event retention is bounded and pruned periodically and at restore. AI/human style assessments are fallible hints, never authorization or verified identity.

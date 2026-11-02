@@ -4,12 +4,12 @@ import sharp from 'sharp';
 
 const MAX_BYTES = 10 * 1024 * 1024;
 const decode = {limitInputPixels: 40000000};
-export async function downloadQQImage(value){
+export async function downloadQQImage(value,{signal}={}){
   const url=new URL(value);
   const allowed=url.hostname==='qpic.cn'||url.hostname.endsWith('.qpic.cn')||['multimedia.nt.qq.com','multimedia.nt.qq.com.cn'].includes(url.hostname);
   if(!allowed||!['https:','http:'].includes(url.protocol)||url.port||url.username||url.password)throw Error('协议端返回的图片地址不在允许的 QQ 图片域名内。');
   url.protocol='https:';
-  const response=await fetch(url,{redirect:'error',signal:AbortSignal.timeout(15000)});
+  const response=await fetch(url,{redirect:'error',signal:signal?AbortSignal.any([signal,AbortSignal.timeout(15000)]):AbortSignal.timeout(15000)});
   if(!response.ok)throw Error('QQ 图片下载失败：HTTP '+response.status);
   let size=0;const parts=[];
   for await(const part of response.body){size+=part.length;if(size>MAX_BYTES)throw Error('图片超过 10 MiB。');parts.push(part);}

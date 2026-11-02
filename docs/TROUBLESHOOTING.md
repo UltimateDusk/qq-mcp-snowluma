@@ -30,7 +30,7 @@ SnowLuma 群历史可能需要先收到该群新消息建立锚点。让群里�
 
 ## `cursor_gap: true`
 
-事件 WebSocket 断线、MCP 重启、缓存溢出或 30 分钟 retention 过期。按目标会话调用 `qq_read_history` 补查，然后使用本次 wait 返回的新 cursor 继续。
+事件 WebSocket 断线、MCP 重启、缓存溢出或 30 分钟 retention 过期。1.7.0 会恢复保留窗口内已持久化的事件，但不能补齐停机期间上游未投递的消息。按目标会话调用 `qq_read_history` 补查，然后使用本次 wait 返回的新 cursor 继续。
 
 ## 发送返回 `status: unknown`
 
