@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.6.1 - 2026-11-02
+
+- Fixed QQ image and animation reads rejecting SnowLuma's `multimedia.nt.qq.com.cn` image URLs. Added the exact hostname while retaining existing domain, HTTPS, redirect, size and format restrictions.
+- Added regression coverage for the hostname and lookalike/credential/port rejection.
+- Added upgrade instructions: restart the actual MCP backend after updating; refreshing ChatGPT tools alone does not reload server code.
+
 ## 1.6.0 - 2026-10-29
 
 - Added portable environment-based configuration with no account-specific defaults.

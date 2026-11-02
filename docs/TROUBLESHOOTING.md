@@ -20,6 +20,14 @@ MCP 检测到 SnowLuma 暴露的 QQ 与 `QQ_EXPECTED_ACCOUNT` 不同。停止 MC
 
 SnowLuma 群历史可能需要先收到该群新消息建立锚点。让群里产生一条消息，再调用 `qq_read_history`。空数组不一定表示群里没有历史。
 
+## 能收到图片消息，但读取时报「图片地址不在允许的 QQ 图片域名内」
+
+1.6.0 的图片下载允许列表漏了 SnowLuma 使用的 `multimedia.nt.qq.com.cn`（末尾包含 `.cn`），导致部分图片和动图在下载前被拒绝。1.6.1 已添加这个精确域名，仍保留其他下载限制。
+
+按 [README 的升级步骤](../README.md#升级已有安装)更新并重启实际运行的 MCP 后端，再调用 `qq_status`，确认 `mcp.version` 为 `1.6.1` 或更新版本，然后重试 `qq_read_image` / `qq_read_animation`。单独刷新 ChatGPT 工具不会加载服务器代码修改。
+
+如果新版仍报同样错误，提供工具错误、版本号和图片 URL 的主机名即可；不要公开包含 `rkey` 等参数的完整图片链接，也不要直接关闭域名校验。
+
 ## `cursor_gap: true`
 
 事件 WebSocket 断线、MCP 重启、缓存溢出或 30 分钟 retention 过期。按目标会话调用 `qq_read_history` 补查，然后使用本次 wait 返回的新 cursor 继续。

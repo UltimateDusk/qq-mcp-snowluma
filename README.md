@@ -41,6 +41,25 @@ SnowLuma ── 已登录的 QQ 客户端
 
 完整的 18 个工具见 [工具说明](docs/TOOLS.md)，持续聊天参数见 [Flow 控制](docs/FLOW_CONTROL.md)。需要从零配置时，可以直接下载 [Word 版安装与使用教程](docs/QQ-MCP-for-SnowLuma-安装与使用教程.docx)。
 
+## 升级已有安装
+
+**1.6.1 修复了部分图片和动图报「图片地址不在允许的 QQ 图片域名内」的问题。** SnowLuma 使用的 `multimedia.nt.qq.com.cn` 已加入精确允许列表。
+
+1. 结束正在进行的连续聊天任务，停止 QQ MCP 后端。按你的通道启动方式暂停通道，更新后再连接。
+2. 在**实际启动 MCP 的项目目录**更新代码。Git 安装可运行：
+
+   ```powershell
+   git pull --ff-only
+   npm ci
+   ```
+
+   若 Git 提示本地修改冲突，先保留自己的修改再合并，不要强制覆盖。下载 ZIP 安装的用户请下载新版源码，备份原目录后更新程序文件；保留自己的 `config/local.ps1`、`data/`、`outbox/` 和通道配置，不要用示例配置覆盖它们。
+
+3. 用原启动方式重新启动 MCP（本仓库提供 `start-qq-mcp.cmd` 或 `scripts/start-http.ps1`），再启动或恢复通道，确认 ready。QQ 和 SnowLuma 已在线时无需重新登录。
+4. 回原来的 ChatGPT 对话重新 `@QQ`，调用 `qq_status`，确认 `mcp.version` 为 `1.6.1` 或更新版本，再读一次图片。若工具定义有变化，另在应用管理页执行 Refresh/Scan Tools。
+
+**刷新插件不能代替重启 MCP 后端。** 如果版本仍旧，检查快捷方式或通道是否指向另一份安装目录。重启会清空内存事件缓存，继续聊天前应补查相关会话历史。
+
 ## 系统要求
 
 - Windows 10/11 x64。

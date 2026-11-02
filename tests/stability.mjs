@@ -61,7 +61,7 @@ try{
  for(let n=0;n<100;n++){try{const r=await fetch(`http://127.0.0.1:${port}/health`,{headers:{Authorization:authorization}});if(r.ok)break;}catch{}if(n===99)throw Error('Host startup failed '+stderr);await sleep(50);}
  const tools=await rpc('tools/list');assert.equal(tools.tools.length,18); // Operational request before initialize is valid in stateless HTTP.
  for(let n=0;n<3;n++)await rpc('initialize',{protocolVersion:'2025-11-25',capabilities:{},clientInfo:{name:'reconnecting-test',version:'1'}});
- const startStatus=data(await call('qq_status'));assert.ok(startStatus.events.connected);assert.equal(startStatus.mcp.version,'1.6.0');assert.equal(startStatus.mcp.flow_control.enabled,true);assert.equal(startStatus.mcp.flow_control.soft_duration,true);const initial=startStatus.events.cursor;
+ const startStatus=data(await call('qq_status'));assert.ok(startStatus.events.connected);assert.equal(startStatus.mcp.version,'1.6.1');assert.equal(startStatus.mcp.flow_control.enabled,true);assert.equal(startStatus.mcp.flow_control.soft_duration,true);const initial=startStatus.events.cursor;
  const a=message(10001),b=message(10002),noise=message(10003),p=message(10004);for(const e of [a,b,noise,p,a,poke(),poke(),poke(10004)])push(e);
  const filter={target_ids:[{target_type:'group',target_id:'10001'},{target_type:'group',target_id:'10002'},{target_type:'private',target_id:'10004'}],timeout_ms:1000};
  let batch=data(await call('qq_wait_for_message',{...filter,after_event_id:initial}));assert.equal(batch.events.length,6);assert.equal(batch.messages.length,3);assert.equal(batch.events.filter(e=>e.event_type==='poke').length,3);assert.equal(batch.cursor_gap,false);assert.ok(batch.events.some(e=>e.operator_id==='10004'&&e.target_type==='private'));

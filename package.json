@@ -1,6 +1,6 @@
 {
   "name": "qq-mcp-snowluma",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "A safety-focused MCP server for controlling a local QQ session through SnowLuma and OneBot v11.",
   "type": "module",
   "private": true,
